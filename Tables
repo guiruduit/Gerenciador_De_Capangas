@@ -1,0 +1,24 @@
+/*
+Controle de Capangas do filme o 6º dia:
+Um capanga pode ter N versões;
+Quando uma versão é morta seu status é alterado para "clonagem pendente" e seu corpo registrado nos CapangasFinados com a respectiva causa da morte, para ser estudado;
+Quando sua nova versão é finalizada seu status é alterado para "ativo" e sua versão atualizada;
+*/
+
+CREATE SCHEMA Gerenciador_De_Capangas;
+
+CREATE TABLE Gerenciador_De_Capangas.Capanga (
+	id SERIAL,
+	PRIMARY KEY (id),
+	nome VARCHAR(40),
+	versao INT,
+	status VARCHAR(20)
+);
+
+CREATE TABLE Gerenciador_De_Capangas.Finado (
+	idCapanga INT REFERENCES Gerenciador_De_Capangas.Capanga (id),
+	versao VARCHAR(40),
+	PRIMARY KEY (idCapanga, versao),
+	causa_da_morte VARCHAR(40),
+	data_da_morte DATE
+);

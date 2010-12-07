@@ -1,0 +1,120 @@
+/* Condicional Ternário */
+
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Ternario(BOOLEAN, ANYELEMENT, ANYELEMENT) RETURNS ANYELEMENT AS
+$$
+	BEGIN
+		RETURN (SELECT CASE WHEN ($1 IS TRUE) THEN $2 ELSE $3 END);
+	END
+$$
+LANGUAGE plpgsql;
+
+SELECT Gerenciador_De_Capangas.Ternario((1 < 2), CAST('sim' AS VARCHAR), CAST('nao' AS VARCHAR));
+
+/* Valida_Insert_Capanga */
+
+/*
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Valida_Insert_Capanga() RETURNS TRIGGER AS
+$Valida_Insert_Capanga$
+	DECLARE
+		ultima_id INT := (SELECT MAX(id) FROM Gerenciador_De_Capangas.Capanga);
+	BEGIN
+		IF NEW.nome IS NULL THEN
+			RAISE NOTICE 'ERRO: nome em branco';
+			RETURN NULL;
+		ELSE
+			IF (NOT(NEW.id IS NULL)) THEN NEW.id := ultima_id + 1; END IF;
+			IF (NOT(NEW.versao IS NULL)) THEN NEW.versao := 1; END IF;
+			IF (NOT(NEW.status IS NULL)) THEN NEW.status := 'clone em atividade'; END IF;
+			RETURN NEW;
+		END IF;
+	END
+$Valida_Insert_Capanga$
+LANGUAGE plpgsql;
+*/
+
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Valida_Insert_Capanga() RETURNS TRIGGER AS
+$Valida_Insert_Capanga$
+	DECLARE
+		max_id INT := (SELECT MAX(id) FROM Gerenciador_De_Capangas.Capanga);
+		ultima_id INT := Gerenciador_De_Capangas.Ternario(CAST(max_id AS BOOLEAN), max_id, 0);
+	BEGIN
+		IF NEW.nome IS NULL THEN
+			RAISE NOTICE 'ERRO: nome em branco';
+			RETURN NULL;
+		ELSE
+			NEW.id := ultima_id + 1;
+			NEW.versao := 1;
+			NEW.status := 'clone em atividade';
+			RETURN NEW;
+		END IF;
+	END
+$Valida_Insert_Capanga$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER Valida_Insert_Capanga BEFORE INSERT ON Gerenciador_De_Capangas.Capanga
+	FOR EACH ROW EXECUTE PROCEDURE Gerenciador_De_Capangas.Valida_Insert_Capanga();
+
+INSERT INTO Gerenciador_De_Capangas.Capanga VALUES (5, 'Nelson', 6, 'morto');
+INSERT INTO Gerenciador_De_Capangas.Capanga (nome, versao, status) VALUES ('João', 2, 'seguindo');
+INSERT INTO Gerenciador_De_Capangas.Capanga (nome, versao) VALUES ('Evandro', 3);
+INSERT INTO Gerenciador_De_Capangas.Capanga (nome) VALUES ('Valadares'), ('Tobias'), ('Elias'), ('Pataquada'), ('Carabina'), ('Maneta');
+
+/* Valida_Insert_Finado */
+
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Valida_Insert_Finado() RETURNS TRIGGER AS
+$Valida_Insert_Finado$
+	DECLARE
+		capangas CURSOR (idFinado int) IS SELECT id, versao FROM Gerenciador_De_Capangas.Capanga WHERE id = idFinado;
+		max_id INT := (SELECT MAX(id) FROM Gerenciador_De_Capangas.Capanga)
+	BEGIN
+		IF (max_id < NEW.id) OR ((SELECT capangas (NEW.id)) = 0) THEN
+			RAISE NOTICE 'ATENÇÃO: Capanga não cadastrado, deve ser o Arnold infiltrado!';
+			RETURN NULL;
+		END IF;
+	END
+$Valida_Insert_Finado$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER Valida_Insert_Finado BEFORE INSERT ON Gerenciador_De_Capangas.Finado
+	FOR EACH ROW EXECUTE PROCEDURE Gerenciador_De_Capangas.Valida_Insert_Finado();
+
+/* Valida_Update_Capanga */
+
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Valida_Update_Capanga() RETURNS TRIGGER AS
+$Valida_Update_Capanga$
+	DECLARE
+	BEGIN
+		IF (NEW.nome <> OLD.nome) OR (NEW.versao <> OLD.versao) THEN
+			RAISE NOTICE 'ERRO: Apenas o status pode ser alterado';
+			RETURN NULL;
+		ELSIF NEW.status = 'clonagem pendente' THEN
+			INSERT INTO Gerenciador_De_Capangas.Finado VALUES (OLD.id, OLD.versao, 'Arnold', NOW());
+		ELSIF NEW.status = 'clone em atividade' THEN
+			UPDATE Gerenciador_De_Capangas.Capanga SET versao = versao + 1 WHERE id = OLD.id;
+		ELSE
+			RAISE NOTICE 'ERRO: Status inválido';
+		END IF;
+	END
+$Valida_Update_Capanga$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER Valida_Update_Capanga BEFORE UPDATE ON Gerenciador_De_Capangas.Capanga
+	FOR EACH ROW EXECUTE PROCEDURE Gerenciador_De_Capangas.Valida_Update_Capanga();
+
+/* Retorna_Status_Do_Arnold */
+
+CREATE OR REPLACE FUNCTION Gerenciador_De_Capangas.Retorna_Status_Do_Arnold() RETURNS VARCHAR(60)
+$$
+	DECLARE
+		total_mortos_pelo_arnold INT = SELECT count(*) FROM Gerenciador_De_Capangas.Finado WHERE causa_da_morte = 'Arnold';
+		total_finados INT = SELECT count(*) FROM Gerenciador_De_Capangas.Finado;
+	BEGIN
+		score_do_arnold = ((100 * total_mortos_pelo_arnold)/total_finados)
+		IF score_do_arnold = 100 THEN RAISE NOTICE 'Modo: Conan';
+		ELSIF (score_do_arnold < 100) AND (score_do_arnold > 80) THEN RAISE NOTICE 'Modo: Comando Vermelho';
+		ELSIF (score_do_arnold < 80) AND (score_do_arnold > 60) THEN RAISE NOTICE 'Modo: Predador';
+		ELSIF (score_do_arnold < 60) THEN RAISE NOTICE 'Modo: Um Tira no Jardim';
+		END IF;
+	END
+$$
+LANGUAGE plpgsql;
